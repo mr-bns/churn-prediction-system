@@ -1,6 +1,6 @@
 import pickle
 
-MODEL_PATH = "D:\\churn-prediction\\model\\churn_model.pkl"
+MODEL_PATH = "./models/final_churn_model.pkl"
 
 def load_model():
     with open(MODEL_PATH, "rb") as f:

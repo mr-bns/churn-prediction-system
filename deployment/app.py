@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import numpy as np
-from model_loader import load_model
-from config import Config
+from deployment.model_loader import load_model
+from deployment.config import Config
 
 app = Flask(__name__)
 
