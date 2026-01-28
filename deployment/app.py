@@ -1,10 +1,17 @@
 from flask import Flask, request, jsonify
 import numpy as np
+import pandas as pd
+
 from deployment.model_loader import load_model
 from deployment.input_processor import (
     validate_input,
     consistency_check,
     encode_input
+)
+from deployment.csv_ingestion import (
+    validate_csv_schema,
+    clean_dataframe,
+    convert_to_json
 )
 
 app = Flask(__name__)
@@ -25,8 +32,9 @@ def home():
         "message": "Production ML API is live",
         "endpoints": {
             "/health": "Health check endpoint",
-            "/predict": "POST endpoint for single prediction",
-            "/predict-batch": "POST endpoint for batch prediction (JSON dataset)"
+            "/predict": "POST single prediction",
+            "/predict-batch": "POST batch prediction (JSON dataset)",
+            "/convert-csv": "POST CSV ingestion (CSV → JSON converter)"
         }
     })
 
@@ -150,6 +158,57 @@ def predict_batch():
         "validated": True,
         "total_records": len(dataset),
         "predictions": results
+    })
+
+# ------------------------------
+# CSV Ingestion Endpoint
+# ------------------------------
+@app.route("/convert-csv", methods=["POST"])
+def convert_csv():
+    if "file" not in request.files:
+        return jsonify({
+            "status": "failed",
+            "error": "No file uploaded"
+        }), 400
+
+    file = request.files["file"]
+
+    if not file.filename.endswith(".csv"):
+        return jsonify({
+            "status": "failed",
+            "error": "Only CSV files are supported"
+        }), 400
+
+    # Read CSV
+    try:
+        df = pd.read_csv(file)
+    except Exception as e:
+        return jsonify({
+            "status": "failed",
+            "error": "Invalid CSV file",
+            "details": str(e)
+        }), 400
+
+    # Schema validation
+    valid, error = validate_csv_schema(df)
+    if not valid:
+        return jsonify({
+            "status": "failed",
+            "validated": False,
+            "error": error
+        }), 400
+
+    # Cleaning
+    df_clean = clean_dataframe(df)
+
+    # Conversion
+    json_dataset = convert_to_json(df_clean)
+
+    return jsonify({
+        "status": "success",
+        "validated": True,
+        "total_records": len(json_dataset),
+        "converted_dataset": json_dataset
     })
 
 # ------------------------------
