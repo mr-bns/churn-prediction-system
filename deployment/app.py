@@ -1,11 +1,17 @@
 from flask import Flask, request, jsonify
 import numpy as np
 from deployment.model_loader import load_model
-from deployment.input_processor import validate_input, consistency_check, encode_input
+from deployment.input_processor import (
+    validate_input,
+    consistency_check,
+    encode_input
+)
 
 app = Flask(__name__)
 
-# Load ML model
+# ------------------------------
+# Load ML Model
+# ------------------------------
 model = load_model()
 
 # ------------------------------
@@ -19,12 +25,13 @@ def home():
         "message": "Production ML API is live",
         "endpoints": {
             "/health": "Health check endpoint",
-            "/predict": "POST endpoint for churn prediction"
+            "/predict": "POST endpoint for single prediction",
+            "/predict-batch": "POST endpoint for batch prediction (JSON dataset)"
         }
     })
 
 # ------------------------------
-# Health Check
+# Health Check Endpoint
 # ------------------------------
 @app.route("/health", methods=["GET"])
 def health():
@@ -34,7 +41,7 @@ def health():
     })
 
 # ------------------------------
-# Prediction Endpoint
+# Single Prediction Endpoint
 # ------------------------------
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -68,6 +75,81 @@ def predict():
         "churn_probability": float(round(probability, 4)),
         "status": "success",
         "input_verified": True
+    })
+
+# ------------------------------
+# JSON Batch Prediction Endpoint
+# ------------------------------
+@app.route("/predict-batch", methods=["POST"])
+def predict_batch():
+    payload = request.json
+
+    if not payload or "dataset" not in payload:
+        return jsonify({
+            "status": "failed",
+            "error": "Missing 'dataset' field"
+        }), 400
+
+    dataset = payload["dataset"]
+
+    if not isinstance(dataset, list) or len(dataset) == 0:
+        return jsonify({
+            "status": "failed",
+            "error": "Dataset must be a non-empty list"
+        }), 400
+
+    # -------- Global Validation Phase --------
+    for idx, record in enumerate(dataset):
+        valid, error = validate_input(record)
+        if not valid:
+            return jsonify({
+                "status": "failed",
+                "validated": False,
+                "error": f"Schema error in record {idx}: {error}"
+            }), 400
+
+        consistent, error = consistency_check(record)
+        if not consistent:
+            return jsonify({
+                "status": "failed",
+                "validated": False,
+                "error": f"Consistency error in record {idx}: {error}"
+            }), 400
+
+    # -------- Encoding Phase --------
+    try:
+        feature_matrix = []
+        for record in dataset:
+            encoded = encode_input(record)
+            feature_matrix.append(encoded[0])
+
+        X = np.array(feature_matrix)
+    except Exception as e:
+        return jsonify({
+            "status": "failed",
+            "validated": False,
+            "error": "Encoding failed",
+            "details": str(e)
+        }), 400
+
+    # -------- Prediction Phase --------
+    preds = model.predict(X)
+    probs = model.predict_proba(X)[:, 1]
+
+    # -------- Output Phase --------
+    results = []
+    for i in range(len(preds)):
+        results.append({
+            "index": i,
+            "churn_prediction": int(preds[i]),
+            "churn_probability": round(float(probs[i]), 4)
+        })
+
+    return jsonify({
+        "status": "success",
+        "validated": True,
+        "total_records": len(dataset),
+        "predictions": results
     })
 
 # ------------------------------
