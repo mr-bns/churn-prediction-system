@@ -2,13 +2,14 @@ from flask import Flask, request, jsonify
 import numpy as np
 import pandas as pd
 
-from deployment.model_loader import load_model
-from deployment.input_processor import (
+# Package-relative imports (correct architecture)
+from .model_loader import load_model
+from .input_processor import (
     validate_input,
     consistency_check,
     encode_input
 )
-from deployment.csv_ingestion import (
+from .csv_ingestion import (
     validate_csv_schema,
     clean_dataframe,
     convert_to_json
