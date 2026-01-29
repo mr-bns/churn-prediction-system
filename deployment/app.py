@@ -209,7 +209,7 @@ def convert_csv():
         "status": "success",
         "validated": True,
         "total_records": len(json_dataset),
-        "converted_dataset": json_dataset
+        "dataset": json_dataset
     })
 
 # ------------------------------
